@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Circuitos Eléctricos</title>
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <style>
+        /* --- ESTILOS CSS (Ligeros ajustes para el botón movido) --- */
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --dark-color: #2c3e50;
+            --light-color: #ecf0f1;
+            --component-color: #7f8c8d;
+            --current-color: #f39c12;
+            --wire-color: #34495e;
+            --terminal-color: #95a5a6;
+            --terminal-hover-color: var(--primary-color);
+            --terminal-connected-color: var(--secondary-color);
+        }
+        /* ... (Resto de estilos casi idénticos a la versión anterior) ... */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background-color: #f5f7fa; }
+        .navbar { background-color: var(--dark-color); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); z-index: 10; }
+        .navbar h1 { font-size: 1.5rem; margin: 0; }
+        .navbar-buttons { display: flex; gap: 0.5rem; }
+        .btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+        .btn:disabled { background-color: #bdc3c7 !important; border-color: #bdc3c7 !important; color: #7f8c8d !important; cursor: not-allowed !important; opacity: 0.7; }
+        .btn-primary { background-color: var(--primary-color); color: white; border: 1px solid var(--primary-color); }
+        .btn-primary:not(:disabled):hover { background-color: #2980b9; border-color: #2980b9;}
+        .btn-success { background-color: var(--secondary-color); color: white; border: 1px solid var(--secondary-color); }
+        .btn-success:not(:disabled):hover { background-color: #27ae60; border-color: #27ae60;}
+        .btn-danger { background-color: var(--danger-color); color: white; border: 1px solid var(--danger-color); }
+        .btn-danger:not(:disabled):hover { background-color: #c0392b; border-color: #c0392b;}
+        .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+        .btn-full-width { display: block; width: 100%; margin-top: 1rem; } /* Estilo para botón al 100% */
+
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 250px; background-color: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
+        .sidebar-title { padding: 1rem; font-weight: 600; background-color: var(--light-color); border-bottom: 1px solid #ddd; }
+        .circuits-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
+        .circuit-item { padding: 0.75rem; margin-bottom: 0.5rem; background-color: #f8f9fa; border-radius: 4px; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; position: relative; }
+        .circuit-item:hover { background-color: #edf2f7; }
+        .circuit-item.active { background-color: #e3f2fd; border-left: 3px solid var(--primary-color); }
+        .circuit-item-name { font-weight: 500; margin-bottom: 0.25rem; word-break: break-all; padding-right: 30px; }
+        .circuit-item-info { font-size: 0.8rem; color: #666; word-break: break-all; }
+        .circuit-item .delete-circuit-btn { position: absolute; top: 5px; right: 5px; padding: 2px 5px; font-size: 0.9rem; line-height: 1; height: 20px; width: 20px; text-align: center; }
+
+        .workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .components-toolbar { padding: 0.5rem; background-color: white; border-bottom: 1px solid #ddd; display: flex; gap: 0.5rem; overflow-x: auto; }
+        .component-btn { padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; background-color: white; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; min-width: 60px; transition: all 0.2s; }
+        .component-btn:hover { background-color: #f5f7fa; border-color: #ccc; }
+        .component-btn:disabled { background-color: #eee; cursor: not-allowed; opacity: 0.6; }
+        .component-icon { width: 24px; height: 24px; stroke: var(--component-color); stroke-width: 1.5; fill: none; }
+        .component-label { font-size: 0.7rem; text-align: center; }
+
+        .circuit-canvas { flex: 1; background-color: #ffffff; background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px); background-size: 20px 20px; overflow: auto; position: relative; } /* Cambiado a overflow: auto */
+        .circuit-stage { width: 200%; height: 200%; /* Tamaño más grande para scroll */ position: relative; /* Cambiado a relative */ top: 0; left: 0; overflow: visible; z-index: 1; }
+        #connections-svg { width: 100%; height: 100%; position: absolute; top: 0; left: 0; pointer-events: none; z-index: 0; overflow: visible; /* Asegurar que se vean líneas fuera del viewport inicial */ }
+        #connections-svg .connection-wire { stroke: var(--wire-color); stroke-width: 2.5px; stroke-linecap: round; transition: stroke 0.2s ease-in-out; pointer-events: stroke; cursor: pointer; }
+        #connections-svg .connection-wire:hover { stroke: var(--primary-color); }
+        #connections-svg .connection-wire.active { stroke: var(--current-color); }
+        #connections-svg .temp-wire { stroke: var(--primary-color); stroke-width: 2px; stroke-dasharray: 5, 5; }
+
+
+        .component { position: absolute; background-color: white; border: 1px solid #aaa; border-radius: 4px; padding: 5px; min-width: 60px; display: flex; flex-direction: column; align-items: center; cursor: move; user-select: none; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); z-index: 1; transition: box-shadow 0.2s, border-color 0.2s; }
+        .component.selected { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.4); }
+        .component.connecting { cursor: crosshair; }
+        .component-header { display: flex; justify-content: space-between; width: 100%; margin-bottom: 4px; font-size: 0.7rem; color: #555; }
+        .component-name { font-weight: 500; }
+        .component-value { font-size: 0.7rem; }
+        .component-visual { width: 100%; height: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+        .component-visual svg { width: 32px; height: 32px; stroke: var(--dark-color); stroke-width: 1.5; fill: none; }
+        .component[data-type="switch"] .component-visual { cursor: pointer; }
+
+        .component-terminal { position: absolute; width: 12px; height: 12px; background-color: var(--terminal-color); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 3px rgba(0,0,0,0.2); z-index: 2; cursor: crosshair; transition: background-color 0.2s; }
+        .component-terminal:hover, .component-terminal.highlight { background-color: var(--terminal-hover-color); }
+        .terminal-left { left: -7px; top: 50%; transform: translateY(-50%); }
+        .terminal-right { right: -7px; top: 50%; transform: translateY(-50%); }
+        .terminal-top { top: -7px; left: 50%; transform: translateX(-50%); }
+        .terminal-bottom { bottom: -7px; left: 50%; transform: translateX(-50%); }
+
+        .control-panel { width: 300px; background-color: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; /* Evita que el botón se salga */ }
+        .panel-section { padding: 1rem; border-bottom: 1px solid #ddd; /* Se mantiene en los dos primeros */ }
+        .panel-section:last-of-type { border-bottom: none; flex-grow: 1; overflow-y: auto; /* Scroll solo en propiedades */ }
+        .panel-section-fixed { /* Nueva clase para sección simulación y botón gráfica */ padding: 1rem; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+
+        .panel-title { font-weight: 600; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+        .panel-title button { padding: 2px 6px; font-size: 0.8rem; }
+        .simulation-controls { display: flex; flex-direction: column; gap: 0.75rem; }
+        #simulationTime { font-weight: bold; }
+        .control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+        .control-label { font-size: 0.85rem; color: #666; }
+        .component-properties { /* Ya no necesita flex:1 ni overflow */ }
+        .no-component-selected { color: #666; font-style: italic; font-size: 0.9rem; padding-top: 1rem; /* Añadir padding si es necesario */ }
+        .property-group { margin-bottom: 0.75rem; }
+        .property-item { display: flex; align-items: center; margin-bottom: 0.5rem; gap: 0.5rem; }
+        .property-label { width: 80px; font-size: 0.85rem; color: #555; text-align: right; flex-shrink: 0; }
+        .property-input { flex: 1; padding: 0.35rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+        .property-input:disabled { background-color: #f8f9fa; cursor: not-allowed; }
+        .property-unit { font-size: 0.85rem; color: #777; }
+
+        /* ... Estilos Modal, Tooltip, Notification, Spinner, Component Specifics sin cambios ... */
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); display: none; justify-content: center; align-items: center; z-index: 999; }
+        .modal.active { display: flex; }
+        .modal-content { background-color: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); width: 90%; max-width: 800px; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; }
+        .modal-header { padding: 1rem; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background-color: #f8f9fa; }
+        .modal-title { font-weight: 600; font-size: 1.25rem; }
+        .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666; }
+        .modal-close:hover { color: var(--danger-color); }
+        .modal-body { padding: 0; flex: 1; overflow-y: auto; }
+        .graph-container { width: 100%; height: 350px; margin-bottom: 1rem; background-color: #f9f9f9; display:flex; align-items:center; justify-content:center; color:#888; font-style:italic; border: 1px solid #eee; }
+        .recharts-wrapper { width: 100% !important; height: 100% !important; }
+        .recharts-surface { width: 100%; height: 100%; }
+        .recharts-tooltip-wrapper { z-index: 1000; }
+        .tabs { display: flex; border-bottom: 1px solid #ddd; background-color: #f8f9fa; padding: 0 1rem; }
+        .tab { padding: 0.8rem 1.2rem; cursor: pointer; border-bottom: 3px solid transparent; color: #555; font-size: 0.9rem; font-weight: 500; transition: all 0.2s; }
+        .tab:hover { background-color: #eee; }
+        .tab.active { border-bottom: 3px solid var(--primary-color); color: var(--primary-color); }
+        .tab-content { display: none; padding: 1.5rem; }
+        .tab-content.active { display: block; }
+        .new-circuit-form { display: flex; flex-direction: column; gap: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.25rem; }
+        .form-label { font-weight: 500; font-size: 0.9rem; }
+        .form-input { padding: 0.6rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; }
+        .form-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+        .tooltip { position: absolute; background-color: rgba(0, 0, 0, 0.8); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; z-index: 1000; pointer-events: none; white-space: nowrap; display: none; }
+        .notification { position: fixed; bottom: 20px; right: 20px; padding: 0.75rem 1rem; background-color: white; border-left: 4px solid var(--primary-color); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); z-index: 999; transform: translateX(120%); transition: transform 0.3s ease-out; min-width: 250px; }
+        .notification.show { transform: translateX(0); }
+        .notification.success { border-left-color: var(--secondary-color); }
+        .notification.error { border-left-color: var(--danger-color); }
+        .notification.warning { border-left-color: #f39c12; }
+        .notification.info { border-left-color: var(--primary-color); }
+        .notification-title { font-weight: 600; margin-bottom: 0.25rem; }
+        .notification-message { font-size: 0.9rem; color: #555; }
+        .loading-spinner { border: 4px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top: 4px solid var(--primary-color); width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .led-visual { width: 20px; height: 20px; border-radius: 50%; background-color: #777; border: 2px solid #555; transition: all 0.3s; box-shadow: inset 0 0 5px rgba(0,0,0,0.2); }
+        .led-visual.on { background-color: #f1c40f; border-color: #f39c12; box-shadow: 0 0 12px rgba(241, 196, 15, 0.9), inset 0 0 5px rgba(255,255,255,0.3); }
+        .switch-visual { width: 30px; height: 10px; background-color: #ccc; border: 1px solid #999; position: relative; border-radius: 2px; cursor: pointer; }
+        .switch-visual::before { content: ''; position: absolute; width: 4px; height: 14px; background-color: #666; top: -3px; left: 4px; transform-origin: bottom center; transform: rotate(-45deg); transition: transform 0.2s ease-in-out, left 0.2s ease-in-out; border-radius: 1px; }
+        .switch-visual.on::before { transform: rotate(45deg); left: 22px; }
+
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>Simulador de Circuitos Eléctricos</h1>
+        <div class="navbar-buttons">
+            <button id="newCircuitBtn" class="btn btn-primary">Nuevo Circuito</button>
+            <button id="simulateBtn" class="btn btn-success">Iniciar Simulación</button>
+            </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-title">Mis Circuitos</div>
+            <div id="circuitsList" class="circuits-list"></div>
+        </div>
+
+        <div class="workspace">
+            <div class="components-toolbar" id="componentsToolbar">
+                <button class="component-btn" data-component="resistor" title="Resistencia"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 6 L 7 9 L 9 15 L 11 9 L 13 15 L 15 9 L 17 15 L 18 12 H 20"/></svg><span class="component-label">Resistor</span></button>
+                 <button class="component-btn" data-component="capacitor" title="Capacitor"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 10 M 14 12 H 20 M 10 6 V 18 M 14 6 V 18"/></svg><span class="component-label">Capacitor</span></button>
+                 <button class="component-btn" data-component="inductor" title="Inductor"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 7 C 7 9 9 9 9 12 C 9 15 11 15 11 12 C 11 9 13 9 13 12 C 13 15 15 15 15 12 H 20"/></svg><span class="component-label">Inductor</span></button>
+                 <button class="component-btn" data-component="led" title="LED"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 8 L 12 7 L 16 12 H 20 M 12 7 V 17 M 9 17 H 15"/><line x1="17" y1="6" x2="19" y2="4" stroke-width="1.5"/><line x1="18" y1="8" x2="20" y2="6" stroke-width="1.5"/></svg><span class="component-label">LED</span></button>
+                 <button class="component-btn" data-component="switch" title="Interruptor"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 8 M 16 12 H 20 M 8 12 L 16 8"/><circle cx="8" cy="12" r="2.5" fill="white"/><circle cx="16" cy="12" r="2.5" fill="white"/></svg><span class="component-label">Switch</span></button>
+                 <button class="component-btn" data-component="battery" title="Batería (Fuente de Voltaje DC)"><svg class="component-icon" viewBox="0 0 24 24"><path d="M4 12 H 8 M 16 12 H 20 M 8 8 V 16 M 12 10 V 14 M 16 8 V 16"/><text x="17" y="9" font-size="5" fill="currentColor">+</text><text x="17" y="17" font-size="5" fill="currentColor">-</text></svg><span class="component-label">Batería</span></button>
+                 <button class="component-btn" data-component="ground" title="Tierra"><svg class="component-icon" viewBox="0 0 24 24"><path d="M12 4 V 12 M 8 12 H 16 M 9 15 H 15 M 10.5 18 H 13.5"/></svg><span class="component-label">Tierra</span></button>
+            </div>
+            <div class="circuit-canvas" id="circuitCanvas">
+                 <svg id="connections-svg" width="200%" height="200%"></svg> <div id="circuitStage" class="circuit-stage"></div>
+                 <div id="tooltip" class="tooltip"></div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="panel-section-fixed">
+                <div class="panel-title">Control de Simulación</div>
+                <div class="simulation-controls">
+                    <button id="resetSimulationBtn" class="btn btn-danger">Detener Simulación</button>
+                    <div class="control-group">
+                        <div class="control-label">Tiempo de simulación: <span id="simulationTime">0.00s</span></div>
+                    </div>
+                    <div id="simulationStatus" style="font-size: 0.9rem; margin-top: 5px;">Estado: Detenido</div>
+                </div>
+            </div>
+            <div class="panel-section" id="componentPropertiesSection">
+                 <div class="panel-title" id="componentPropertiesTitle">
+                      <span>Propiedades</span>
+                      <button id="deleteComponentBtn" class="btn btn-danger btn-sm" style="display: none;">Eliminar</button>
+                  </div>
+                 <div id="componentPropertiesContent">
+                     <div class="no-component-selected">Selecciona un componente para ver/editar sus propiedades</div>
+                 </div>
+            </div>
+             <div class="panel-section-fixed">
+                 <button id="generateGraphBtn" class="btn btn-primary btn-full-width">Generar Gráfica</button>
+             </div>
+        </div>
+    </div>
+
+    <div id="newCircuitModal" class="modal"> <div class="modal-content" style="max-width: 500px;">
+              <div class="modal-header"><div class="modal-title">Nuevo Circuito</div><button class="modal-close" data-close-modal="newCircuitModal">&times;</button></div>
+              <div class="modal-body" style="padding: 1.5rem;"><form id="newCircuitForm" class="new-circuit-form"><div class="form-group"><label class="form-label" for="circuitNameInput">Nombre</label><input type="text" id="circuitNameInput" class="form-input" placeholder="Ej: Circuito RC Básico" required></div><div class="form-group"><label class="form-label" for="circuitDescriptionInput">Descripción</label><textarea id="circuitDescriptionInput" class="form-input" rows="3" placeholder="Breve descripción..."></textarea></div><div class="form-buttons"><button type="button" class="btn btn-danger" data-close-modal="newCircuitModal">Cancelar</button><button type="submit" class="btn btn-primary">Crear</button></div></form></div>
+          </div>
+      </div>
+     <div id="graphModal" class="modal"> <div class="modal-content">
+              <div class="modal-header"><div class="modal-title">Análisis del Circuito</div><button class="modal-close" data-close-modal="graphModal">&times;</button></div>
+              <div class="modal-body">
+                  <div class="tabs">
+                      <div class="tab active" data-tab="voltage">Voltaje (Ejemplo)</div><div class="tab" data-tab="current">Corriente (Ejemplo)</div><div class="tab" data-tab="power">Potencia (Ejemplo)</div>
+                  </div>
+                  <div id="voltageTab" class="tab-content active"><div class="graph-container" id="voltageGraph">Cargando...</div><p style="font-size: 0.8em; text-align: center; color: #888;">Nota: Datos de ejemplo.</p></div>
+                  <div id="currentTab" class="tab-content"><div class="graph-container" id="currentGraph">Cargando...</div><p style="font-size: 0.8em; text-align: center; color: #888;">Nota: Datos de ejemplo.</p></div>
+                  <div id="powerTab" class="tab-content"><div class="graph-container" id="powerGraph">Cargando...</div><p style="font-size: 0.8em; text-align: center; color: #888;">Nota: Datos de ejemplo.</p></div>
+              </div>
+          </div>
+      </div>
+
+     <div class="notification" id="notification">
+        <div class="notification-title" id="notificationTitle">Título</div>
+        <div class="notification-message" id="notificationMessage">Mensaje</div>
+    </div>
+
+    <script>
+        const CircuitSimulator = {
+            // --- STATE (igual) ---
+            circuits: [], currentCircuitId: null, components: [], connections: [], selectedComponentId: null, selectedConnectionId: null,
+            isDragging: false, draggedComponentId: null, dragOffset: { x: 0, y: 0 }, isConnecting: false, connectionStart: null, tempWire: null,
+            isSimulating: false, simulationTime: 0, simulationInterval: null, simulationSpeed: 1, simulationData: [],
+
+            // --- DOM Elements (igual) ---
+            circuitStage: document.getElementById('circuitStage'), connectionsSvg: document.getElementById('connections-svg'), circuitsListEl: document.getElementById('circuitsList'),
+            componentPropertiesContentEl: document.getElementById('componentPropertiesContent'), componentPropertiesTitleEl: document.getElementById('componentPropertiesTitle'),
+            deleteComponentBtn: document.getElementById('deleteComponentBtn'), tooltipEl: document.getElementById('tooltip'), simulationTimeEl: document.getElementById('simulationTime'),
+            simulationStatusEl: document.getElementById('simulationStatus'), simulateBtn: document.getElementById('simulateBtn'), generateGraphBtn: document.getElementById('generateGraphBtn'),
+            newCircuitModal: document.getElementById('newCircuitModal'), graphModal: document.getElementById('graphModal'), notificationEl: document.getElementById('notification'),
+            notificationTitleEl: document.getElementById('notificationTitle'), notificationMessageEl: document.getElementById('notificationMessage'),
+
+            // --- CONSTANTS (igual) ---
+             COMPONENT_DEFAULTS: { resistor: { value: 1000, unit: 'Ω' }, capacitor: { value: 1e-6, unit: 'F' }, inductor: { value: 1e-3, unit: 'H' }, led: { forwardVoltage: 2.0, unit: 'V', state: 'off' }, switch: { state: 'open' }, battery: { value: 9, unit: 'V' }, ground: {}, },
+             TERMINAL_POSITIONS: { resistor: [{ id: 0, side: 'left' }, { id: 1, side: 'right' }], capacitor: [{ id: 0, side: 'left' }, { id: 1, side: 'right' }], inductor: [{ id: 0, side: 'left' }, { id: 1, side: 'right' }], led: [{ id: 0, side: 'left' }, { id: 1, side: 'right' }], switch: [{ id: 0, side: 'left' }, { id: 1, side: 'right' }], battery: [{ id: 0, side: 'top' }, { id: 1, side: 'bottom' }], ground: [{ id: 0, side: 'top' }], },
+             COMPONENT_SVG_ICONS: { resistor: `<svg viewBox="0 0 40 20"><path d="M 2 10 H 5 L 7 5 L 11 15 L 15 5 L 19 15 L 23 5 L 27 15 L 29 10 H 38" stroke="black" stroke-width="1.5" fill="none"/></svg>`, capacitor: `<svg viewBox="0 0 40 20"><path d="M 2 10 H 15 M 25 10 H 38 M 15 4 V 16 M 25 4 V 16" stroke="black" stroke-width="1.5" fill="none"/></svg>`, inductor: `<svg viewBox="0 0 40 20"><path d="M 2 10 H 8 C 8 5 12 5 12 10 C 12 15 16 15 16 10 C 16 5 20 5 20 10 C 20 15 24 15 24 10 C 24 5 28 5 28 10 H 38" stroke="black" stroke-width="1.5" fill="none"/></svg>`, led: `<svg viewBox="0 0 40 20"><path d="M 2 10 H 10 L 20 5 L 30 10 H 38 M 20 5 V 15 M 15 15 H 25" stroke="black" stroke-width="1.5" fill="none"/><circle cx="20" cy="10" r="12" stroke="black" stroke-width="1" fill="none" stroke-dasharray="2 2"/></svg>`, switch: `<svg viewBox="0 0 40 20"><path d="M 2 10 H 10 M 30 10 H 38 M 10 10 L 30 5" stroke="black" stroke-width="1.5" fill="none"/><circle cx="10" cy="10" r="3" fill="white" stroke="black" stroke-width="1.5"/><circle cx="30" cy="10" r="3" fill="white" stroke="black" stroke-width="1.5"/></svg>`, battery: `<svg viewBox="0 0 20 30"><path d="M 2 15 H 18 M 5 10 V 20 M 15 5 V 25" stroke="black" stroke-width="1.5" fill="none"/><text x="1" y="7" font-size="6">+</text><text x="1" y="27" font-size="6">-</text></svg>`, ground: `<svg viewBox="0 0 20 30"><path d="M 10 2 V 15 M 4 15 H 16 M 6 19 H 14 M 8 23 H 12" stroke="black" stroke-width="1.5" fill="none"/></svg>`, },
+
+            // --- INITIALIZATION (igual) ---
+            init() { this.loadCircuitsFromStorage(); this.setupEventListeners(); this.renderCircuitsList(); if (this.circuits.length > 0) { const lastId = localStorage.getItem('lastCircuitId'); const circuitToLoad = this.circuits.find(c => c.id === lastId) || this.circuits[0]; this.loadCircuit(circuitToLoad.id); } else { this.createNewCircuit("Circuito Inicial", "Circuito de demostración"); } this.showNotification("Simulador iniciado", "Listo para diseñar.", "success"); this.checkRecharts(); },
+            checkRecharts() { if (typeof Recharts === 'undefined') { console.error("Recharts no está cargado."); this.showNotification("Error Librería", "Recharts no se cargó.", "error", 5000); this.generateGraphBtn.disabled = true; } else { console.log("Recharts cargado."); } },
+
+            // --- EVENT LISTENERS (igual) ---
+             setupEventListeners() { document.getElementById('newCircuitBtn').addEventListener('click', () => this.showModal('newCircuitModal')); this.simulateBtn.addEventListener('click', () => this.toggleSimulation()); document.getElementById('resetSimulationBtn').addEventListener('click', () => this.stopSimulation()); this.generateGraphBtn.addEventListener('click', () => this.showGraphModal()); document.querySelectorAll('.component-btn').forEach(button => { button.addEventListener('click', (e) => { const type = button.dataset.component; const rect = this.circuitStage.getBoundingClientRect(); const x = this.circuitStage.parentElement.scrollLeft + rect.width / 2 - 50; const y = this.circuitStage.parentElement.scrollTop + rect.height / 2 - 25; this.addComponent(type, x, y); }); button.addEventListener('mouseenter', (e) => this.showTooltip(e.currentTarget.title, e)); button.addEventListener('mouseleave', () => this.hideTooltip()); }); this.circuitStage.addEventListener('mousedown', this.handleStageMouseDown.bind(this)); document.addEventListener('mousemove', this.handleDocumentMouseMove.bind(this)); document.addEventListener('mouseup', this.handleDocumentMouseUp.bind(this)); this.circuitStage.addEventListener('dblclick', this.handleStageDoubleClick.bind(this)); this.circuitStage.addEventListener('mouseover', this.handleStageMouseOver.bind(this)); this.circuitStage.addEventListener('mouseout', this.handleStageMouseOut.bind(this)); this.connectionsSvg.addEventListener('contextmenu', (e) => { if (e.target.classList.contains('connection-wire')) { e.preventDefault(); const connId = e.target.dataset.connectionId; if (connId && confirm(`¿Eliminar conexión ${connId.slice(0,6)}...?`)) { this.deleteConnection(connId); } } }); this.deleteComponentBtn.addEventListener('click', () => this.deleteSelectedComponent()); this.circuitsListEl.addEventListener('click', (e) => { const item = e.target.closest('.circuit-item'); const delBtn = e.target.closest('.delete-circuit-btn'); if (delBtn && item) { e.stopPropagation(); const id = item.dataset.circuitId; if (confirm(`¿Eliminar circuito "${this.circuits.find(c=>c.id===id)?.name}"?`)) { this.deleteCircuit(id); } } else if (item) { this.loadCircuit(item.dataset.circuitId); } }); document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => this.hideModal(btn.dataset.closeModal))); document.getElementById('newCircuitForm').addEventListener('submit', (e) => { e.preventDefault(); const name = document.getElementById('circuitNameInput').value.trim(); const desc = document.getElementById('circuitDescriptionInput').value.trim(); if (name) { this.createNewCircuit(name, desc); this.hideModal('newCircuitModal'); e.target.reset(); } }); this.graphModal.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', (e) => this.switchGraphTab(e.target))); document.addEventListener('keydown', this.handleKeyDown.bind(this)); },
+
+            // --- CORE LOGIC: Components (igual) ---
+             addComponent(type, x, y) { if (!this.currentCircuitId) { this.showNotification("Error", "No hay circuito activo.", "error"); return; } const id = `comp_${Date.now()}_${Math.random().toString(16).slice(2)}`; const props = JSON.parse(JSON.stringify(this.COMPONENT_DEFAULTS[type] || {})); const terms = this.TERMINAL_POSITIONS[type] || []; const comp = { id, type, x: Math.max(0, x), y: Math.max(0, y), properties: props, terminals: terms.map(t => ({ id: `${id}_term_${t.id}`, parentId: id, side: t.side, connectedTo: null })) }; this.components.push(comp); this.renderComponent(comp); this.selectComponent(id); this.saveCurrentCircuit(); this.showNotification("Componente añadido", `${type}`, "success", 1500); },
+             renderComponent(component) { let el = document.getElementById(component.id); if (!el) { el = document.createElement('div'); el.id = component.id; el.className = 'component'; el.dataset.componentId = component.id; el.dataset.type = component.type; this.circuitStage.appendChild(el); el.addEventListener('mousedown', (e) => { if (!e.target.classList.contains('component-terminal')) this.handleComponentMouseDown(e, component.id); }); if (component.type === 'switch') el.addEventListener('click', (e) => { if (!this.isDragging && !this.isConnecting) this.toggleSwitch(component.id); }); } el.style.left = `${component.x}px`; el.style.top = `${component.y}px`; const valStr = component.properties.value !== undefined ? `${component.properties.value}${component.properties.unit || ''}` : (component.type === 'ground' ? 'GND' : ''); const visHTML = this.getComponentVisualHTML(component); el.innerHTML = `<div class="component-header"><span class="component-name">${component.type}</span><span class="component-value">${valStr}</span></div><div class="component-visual">${visHTML}</div>${component.terminals.map(t => `<div class="component-terminal ${this.getTerminalPositionClass(t.side)}" data-terminal-id="${t.id}" data-parent-id="${component.id}" title="Terminal ${t.id.slice(-1)}"></div>`).join('')}`; el.querySelectorAll('.component-terminal').forEach(tEl => tEl.addEventListener('mousedown', (e) => { e.stopPropagation(); this.handleTerminalMouseDown(e, tEl.dataset.parentId, tEl.dataset.terminalId); })); el.classList.toggle('selected', component.id === this.selectedComponentId); this.updateComponentVisualState(component); },
+             getComponentVisualHTML(component) { switch (component.type) { case 'led': return `<div class="led-visual ${component.properties.state === 'on' ? 'on' : ''}"></div>`; case 'switch': return `<div class="switch-visual ${component.properties.state === 'closed' ? 'on' : ''}"></div>`; default: return this.COMPONENT_SVG_ICONS[component.type] || `<span style="font-size:0.8em;">${component.type}</span>`; } },
+             updateComponentVisualState(component) { const el = document.getElementById(component.id); if (!el) return; if (component.type === 'led') { const led = el.querySelector('.led-visual'); if(led) led.classList.toggle('on', component.properties.state === 'on'); } else if (component.type === 'switch') { const sw = el.querySelector('.switch-visual'); if(sw) sw.classList.toggle('on', component.properties.state === 'closed'); } },
+             toggleSwitch(componentId) { const comp = this.getComponentById(componentId); if (!comp || comp.type !== 'switch') return; comp.properties.state = (comp.properties.state === 'open') ? 'closed' : 'open'; this.updateComponentVisualState(comp); this.renderComponentProperties(comp); this.saveCurrentCircuit(); if (this.isSimulating) this.runSimulationStep(); this.showNotification("Switch", `Estado: ${comp.properties.state}`, "info", 1000); },
+             getTerminalPositionClass(side) { switch (side) { case 'left': return 'terminal-left'; case 'right': return 'terminal-right'; case 'top': return 'terminal-top'; case 'bottom': return 'terminal-bottom'; default: return 'terminal-right'; } },
+             getTerminalAbsolutePosition(componentId, terminalId) { const comp = this.getComponentById(componentId); const term = comp?.terminals.find(t => t.id === terminalId); const compEl = document.getElementById(componentId); const termEl = compEl?.querySelector(`[data-terminal-id="${terminalId}"]`); if (!comp || !term || !compEl || !termEl) { console.error("GetPos: Comp/Term no encontrado:", componentId, terminalId); return null; } const termRect = termEl.getBoundingClientRect(); const stageRect = this.circuitStage.parentElement.getBoundingClientRect(); /* Usar el canvas con scroll */ const x = termRect.left + termRect.width / 2 - stageRect.left + this.circuitStage.parentElement.scrollLeft; const y = termRect.top + termRect.height / 2 - stageRect.top + this.circuitStage.parentElement.scrollTop; return { x, y }; },
+             deleteComponent(componentId) { const conns = this.connections.filter(c => c.startCompId === componentId || c.endCompId === componentId); conns.forEach(c => this.deleteConnection(c.id, false)); this.components = this.components.filter(c => c.id !== componentId); const el = document.getElementById(componentId); if (el) el.remove(); if (this.selectedComponentId === componentId) this.selectComponent(null); this.renderAllConnections(); this.saveCurrentCircuit(); this.showNotification("Componente eliminado", "", "info", 1500); },
+             deleteSelectedComponent() { if (this.selectedComponentId) this.deleteComponent(this.selectedComponentId); },
+             selectComponent(componentId) { if (this.selectedComponentId === componentId && componentId !== null) return; /* Evitar re-render si ya está seleccionado */ if (this.selectedComponentId) { const oldEl = document.getElementById(this.selectedComponentId); if (oldEl) oldEl.classList.remove('selected'); } this.selectedComponentId = componentId; this.selectedConnectionId = null; if (this.selectedComponentId) { const newEl = document.getElementById(this.selectedComponentId); if (newEl) newEl.classList.add('selected'); const comp = this.getComponentById(componentId); this.renderComponentProperties(comp); this.deleteComponentBtn.style.display = 'inline-block'; this.deleteComponentBtn.disabled = this.isSimulating; /* Deshabilitar si simula */ } else { this.renderComponentProperties(null); this.deleteComponentBtn.style.display = 'none'; } },
+             renderComponentProperties(component) { if (!component) { this.componentPropertiesContentEl.innerHTML = `<div class="no-component-selected">Selecciona un componente...</div>`; this.componentPropertiesTitleEl.querySelector('span').textContent = 'Propiedades'; return; } this.componentPropertiesTitleEl.querySelector('span').textContent = `Propiedades (${component.type} - ${component.id.slice(0,8)})`; let html = '<div class="property-group">'; const dis = this.isSimulating ? 'disabled' : ''; if (component.properties.value !== undefined) { html += `<div class="property-item"><label class="property-label" for="prop_${component.id}_value">Valor:</label><input class="property-input" type="number" step="any" id="prop_${component.id}_value" data-property="value" value="${component.properties.value}" ${dis}>${component.properties.unit ? `<span class="property-unit">${component.properties.unit}</span>` : ''}</div>`; } if (component.type === 'led' && component.properties.forwardVoltage !== undefined) { html += `<div class="property-item"><label class="property-label" for="prop_${component.id}_fv">Voltaje (Fwd):</label><input class="property-input" type="number" step="0.1" id="prop_${component.id}_fv" data-property="forwardVoltage" value="${component.properties.forwardVoltage}" ${dis}><span class="property-unit">V</span></div>`; } if (component.properties.state !== undefined) { html += `<div class="property-item"><label class="property-label">Estado:</label><span style="font-weight:500;">${component.properties.state}</span>${component.type === 'switch' ? '<span style="font-size:0.8em; color:#888;"> (Clic para cambiar)</span>' : ''}</div>`; } html += '</div>'; this.componentPropertiesContentEl.innerHTML = html; this.componentPropertiesContentEl.querySelectorAll('.property-input').forEach(input => { input.addEventListener('change', (e) => { const prop = e.target.dataset.property; let val = e.target.value; if (e.target.type === 'number' || !isNaN(parseFloat(val))) { val = parseFloat(val); if (isNaN(val)) { this.showNotification("Error", "Valor inválido.", "error"); e.target.value = component.properties[prop]; return; } } this.updateComponentProperty(component.id, prop, val); }); }); },
+            /* updateComponentProperty: Actualiza el modelo y LUEGO llama a renderComponentProperties para refrescar la UI.
+               Esto asegura que la UI siempre refleje el estado real del modelo. No crea 'otra casilla'. */
+             updateComponentProperty(componentId, propertyName, newValue) { const comp = this.getComponentById(componentId); if (!comp || !comp.properties.hasOwnProperty(propertyName)) return; comp.properties[propertyName] = newValue; this.renderComponent(comp); this.renderComponentProperties(comp); this.saveCurrentCircuit(); if (this.isSimulating) this.runSimulationStep(); },
+
+            // --- CORE LOGIC: Connections (igual) ---
+             startConnection(componentId, terminalId) { this.isConnecting = true; const pos = this.getTerminalAbsolutePosition(componentId, terminalId); if (!pos) { this.isConnecting = false; return; } this.connectionStart = { componentId, terminalId, x: pos.x, y: pos.y }; this.tempWire = document.createElementNS('http://www.w3.org/2000/svg', 'line'); this.tempWire.setAttribute('x1', pos.x); this.tempWire.setAttribute('y1', pos.y); this.tempWire.setAttribute('x2', pos.x); this.tempWire.setAttribute('y2', pos.y); this.tempWire.setAttribute('class', 'temp-wire'); this.connectionsSvg.appendChild(this.tempWire); document.body.style.cursor = 'crosshair'; this.circuitStage.classList.add('connecting'); },
+             updateTempConnection(mouseX, mouseY) { if (!this.isConnecting || !this.tempWire) return; const stageRect = this.circuitStage.parentElement.getBoundingClientRect(); const svgX = mouseX - stageRect.left + this.circuitStage.parentElement.scrollLeft; const svgY = mouseY - stageRect.top + this.circuitStage.parentElement.scrollTop; this.tempWire.setAttribute('x2', svgX); this.tempWire.setAttribute('y2', svgY); this.circuitStage.querySelectorAll('.component-terminal.highlight').forEach(t => t.classList.remove('highlight')); const termEl = document.elementFromPoint(mouseX, mouseY); if (termEl && termEl.classList.contains('component-terminal') && termEl.dataset.terminalId !== this.connectionStart.terminalId) termEl.classList.add('highlight'); },
+             endConnection(targetElement, mouseX, mouseY) { if (!this.isConnecting) return; const startCId = this.connectionStart.componentId; const startTId = this.connectionStart.terminalId; if (this.tempWire) { this.tempWire.remove(); this.tempWire = null; } document.body.style.cursor = 'default'; this.circuitStage.classList.remove('connecting'); this.circuitStage.querySelectorAll('.component-terminal.highlight').forEach(t => t.classList.remove('highlight')); let endTermEl = null; if (targetElement && targetElement.classList.contains('component-terminal')) endTermEl = targetElement; else { const elUnder = document.elementFromPoint(mouseX, mouseY); if (elUnder && elUnder.classList.contains('component-terminal')) endTermEl = elUnder; } if (endTermEl && endTermEl.dataset.terminalId !== startTId) { const endCId = endTermEl.dataset.parentId; const endTId = endTermEl.dataset.terminalId; const sTerm = this.getComponentById(startCId)?.terminals.find(t => t.id === startTId); const eTerm = this.getComponentById(endCId)?.terminals.find(t => t.id === endTId); if (sTerm && eTerm) { const connId = `conn_${Date.now()}_${Math.random().toString(16).slice(2)}`; const conn = { id: connId, startCompId:startCId, startTermId:startTId, endCompId:endCId, endTermId:endTId, active: false }; this.connections.push(conn); this.renderConnection(conn); this.saveCurrentCircuit(); this.showNotification("Conexión creada", "", "success", 1000); } else { this.showNotification("Conexión inválida", "", "warning", 2000); } } this.isConnecting = false; this.connectionStart = null; },
+             renderConnection(connection) { let line = this.connectionsSvg.querySelector(`[data-connection-id="${connection.id}"]`); if (!line) { line = document.createElementNS('http://www.w3.org/2000/svg', 'line'); line.dataset.connectionId = connection.id; line.classList.add('connection-wire'); this.connectionsSvg.appendChild(line); } const p1 = this.getTerminalAbsolutePosition(connection.startCompId, connection.startTermId); const p2 = this.getTerminalAbsolutePosition(connection.endCompId, connection.endTermId); if (p1 && p2) { line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y); line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y); } else { console.warn("Term Pos NULL para conn:", connection.id); this.deleteConnection(connection.id); return; } line.classList.toggle('active', !!connection.active); },
+             renderAllConnections() { const exist = new Set(); this.connectionsSvg.querySelectorAll('.connection-wire').forEach(l => exist.add(l.dataset.connectionId)); const curr = new Set(this.connections.map(c => c.id)); this.connections.forEach(c => this.renderConnection(c)); exist.forEach(id => { if (!curr.has(id)) { const l = this.connectionsSvg.querySelector(`[data-connection-id="${id}"]`); if (l) l.remove(); } }); },
+             deleteConnection(connectionId, save = true) { this.connections = this.connections.filter(c => c.id !== connectionId); const line = this.connectionsSvg.querySelector(`[data-connection-id="${connectionId}"]`); if (line) line.remove(); if (save) { this.saveCurrentCircuit(); this.showNotification("Conexión eliminada", "", "info", 1000); } if (this.isSimulating) this.runSimulationStep(); },
+
+            // --- CORE LOGIC: Drag & Drop (igual) ---
+             handleComponentMouseDown(event, componentId) { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); const comp = this.getComponentById(componentId); if (!comp || this.isSimulating) return; /* No drag si simula */ this.isDragging = true; this.draggedComponentId = componentId; this.selectComponent(componentId); const compEl = document.getElementById(componentId); const cRect = compEl.getBoundingClientRect(); this.dragOffset.x = event.clientX - cRect.left; this.dragOffset.y = event.clientY - cRect.top; compEl.style.zIndex = 10; document.body.style.cursor = 'move'; },
+             handleTerminalMouseDown(event, componentId, terminalId) { if (event.button !== 0 || this.isSimulating) return; /* No conectar si simula */ event.preventDefault(); event.stopPropagation(); this.startConnection(componentId, terminalId); },
+             handleStageMouseDown(event) { if (event.button !== 0) return; if (event.target === this.circuitStage || event.target === this.circuitCanvas || event.target === this.connectionsSvg) { this.selectComponent(null); this.selectedConnectionId = null; } },
+             handleDocumentMouseMove(event) { if (this.isDragging && this.draggedComponentId) { event.preventDefault(); const comp = this.getComponentById(this.draggedComponentId); if (!comp) return; const compEl = document.getElementById(this.draggedComponentId); const stageParent = this.circuitStage.parentElement; const sRect = stageParent.getBoundingClientRect(); const nVPX = event.clientX - this.dragOffset.x; const nVPY = event.clientY - this.dragOffset.y; let nX = nVPX - sRect.left + stageParent.scrollLeft; let nY = nVPY - sRect.top + stageParent.scrollTop; nX = Math.max(0, nX); nY = Math.max(0, nY); comp.x = nX; comp.y = nY; compEl.style.left = `${nX}px`; compEl.style.top = `${nY}px`; this.updateConnectionsForComponent(this.draggedComponentId); } else if (this.isConnecting) { event.preventDefault(); this.updateTempConnection(event.clientX, event.clientY); } },
+             handleDocumentMouseUp(event) { if (this.isDragging && this.draggedComponentId) { if (event.button !== 0) return; const compEl = document.getElementById(this.draggedComponentId); if (compEl) compEl.style.zIndex = 1; this.isDragging = false; this.draggedComponentId = null; document.body.style.cursor = 'default'; this.saveCurrentCircuit(); } else if (this.isConnecting) { if (event.button !== 0) return; this.endConnection(event.target, event.clientX, event.clientY); } },
+             handleStageDoubleClick(event) { const compEl = event.target.closest('.component'); if (compEl && !this.isSimulating) { console.log("DblClick Comp:", compEl.dataset.componentId); } },
+             handleKeyDown(event) { if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedComponentId && !this.isSimulating) { if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return; event.preventDefault(); this.deleteSelectedComponent(); } else if (event.key === 'Escape') { if (this.isConnecting) { if (this.tempWire) this.tempWire.remove(); this.tempWire = null; document.body.style.cursor = 'default'; this.circuitStage.classList.remove('connecting'); this.isConnecting = false; this.connectionStart = null; } else if (this.selectedComponentId || this.selectedConnectionId) { this.selectComponent(null); this.selectedConnectionId = null; } else { this.hideModal('newCircuitModal'); this.hideModal('graphModal'); } } else if (event.ctrlKey && event.key === 's') { event.preventDefault(); this.saveCurrentCircuit(); this.showNotification("Guardado", "Circuito guardado.", "success", 1000); } },
+             handleStageMouseOver(event) { const target = event.target; if (target.classList.contains('component-terminal')) { const pId = target.dataset.parentId; const tId = target.dataset.terminalId; const comp = this.getComponentById(pId); if (comp) { const term = comp.terminals.find(t => t.id === tId); this.showTooltip(`Terminal ${term?.side} (${comp.type})`, event); } } else if (target.closest('.component')) { const compEl = target.closest('.component'); const compId = compEl.dataset.componentId; const comp = this.getComponentById(compId); if (comp) { this.showTooltip(`${comp.type} (${comp.id.slice(0,6)})`, event); } } },
+             handleStageMouseOut(event) { this.hideTooltip(); },
+             updateConnectionsForComponent(componentId) { this.connections.forEach(conn => { if (conn.startCompId === componentId || conn.endCompId === componentId) { this.renderConnection(conn); } }); },
+
+            // --- CORE LOGIC: Simulation (Igual pero con botón corregido) ---
+            toggleSimulation() { if (this.isSimulating) { this.stopSimulation(); } else { this.startSimulation(); } },
+            startSimulation() { if (!this.currentCircuitId || this.components.length === 0) { this.showNotification("Simulación", "No hay circuito.", "warning"); return; } if (this.isSimulating) return; this.isSimulating = true; this.simulationTime = 0; this.simulationData = []; this.simulationStatusEl.textContent = 'Estado: Corriendo'; this.simulationStatusEl.style.color = 'green'; this.simulateBtn.textContent = 'Simulación Activa'; this.simulateBtn.classList.replace('btn-success', 'btn-danger'); this.showNotification("Simulación Iniciada", "", "info"); this.toggleUIEditability(false); const intTime = 100; this.simulationInterval = setInterval(() => { this.simulationTime += intTime / 1000; this.simulationTimeEl.textContent = `${this.simulationTime.toFixed(2)}s`; this.runSimulationStep(); if (this.simulationTime >= 10) { this.stopSimulation(); this.showNotification("Simulación Completada", "Se simularon 10s.", "success"); } }, intTime); },
+            stopSimulation() { if (!this.isSimulating) return; this.isSimulating = false; clearInterval(this.simulationInterval); this.simulationInterval = null; this.simulationStatusEl.textContent = 'Estado: Detenido'; this.simulationStatusEl.style.color = 'red'; this.simulateBtn.textContent = 'Iniciar Simulación'; this.simulateBtn.classList.replace('btn-danger', 'btn-success'); /* CORRECCIÓN AQUÍ */ this.showNotification("Simulación Detenida", "", "info"); this.connections.forEach(c => c.active = false); this.components.forEach(c => { if(c.type === 'led') c.properties.state = 'off'; }); this.renderAllComponents(); this.renderAllConnections(); this.toggleUIEditability(true); },
+             toggleUIEditability(editable) { document.querySelectorAll('.component-btn').forEach(b => b.disabled = !editable); this.deleteComponentBtn.disabled = !editable || !this.selectedComponentId; this.componentPropertiesContentEl.querySelectorAll('input, select, textarea').forEach(i => i.disabled = !editable); document.getElementById('newCircuitBtn').disabled = !editable; this.circuitsListEl.style.pointerEvents = editable ? 'auto' : 'none'; this.circuitsListEl.querySelectorAll('button').forEach(b => b.disabled = !editable); document.getElementById('resetSimulationBtn').disabled = !this.isSimulating; this.generateGraphBtn.disabled = this.isSimulating; /* Deshabilitar gráficas si simula */},
+             runSimulationStep() { let v=0, c=0, p=0, led=false; const bat = this.components.find(cp => cp.type === 'battery'); if (bat) { const amp = bat.properties.value || 9; const freq = 0.5; v = amp * Math.sin(2 * Math.PI * freq * this.simulationTime); c = (v / 1000) * (0.8 + Math.random()*0.4); p = v * c; led = v > amp * 0.5; } this.connections.forEach(cn => cn.active = led); this.components.forEach(cp => { if (cp.type === 'led') cp.properties.state = led ? 'on' : 'off'; }); this.renderAllComponents(); this.renderAllConnections(); this.simulationData.push({ time: parseFloat(this.simulationTime.toFixed(2)), voltage: parseFloat(v.toFixed(2)), current: parseFloat(c.toFixed(3)), power: parseFloat(p.toFixed(3)) }); if (this.simulationData.length > 500) this.simulationData.shift(); },
+
+            // --- CORE LOGIC: Circuit Management (igual) ---
+             createNewCircuit(name, description = "") { const id = `circ_${Date.now()}`; const circ = { id, name, description, components: [], connections: [] }; this.circuits.push(circ); this.saveCircuitsToStorage(); this.renderCircuitsList(); this.loadCircuit(id); this.showNotification("Circuito Creado", `"${name}"`, "success"); },
+             loadCircuit(circuitId) { if (this.currentCircuitId === circuitId) return; if(this.currentCircuitId) this.saveCurrentCircuit(); const circ = this.circuits.find(c => c.id === circuitId); if (!circ) { console.error("Load Error: Not found", circuitId); this.showNotification("Error Carga", `ID ${circuitId} no encontrado.`, "error"); return; } this.stopSimulation(); this.currentCircuitId = circuitId; localStorage.setItem('lastCircuitId', circuitId); this.circuitStage.innerHTML = ''; this.connectionsSvg.innerHTML = ''; this.components = JSON.parse(JSON.stringify(circ.components || [])); this.connections = JSON.parse(JSON.stringify(circ.connections || [])); this.selectedComponentId = null; this.selectedConnectionId = null; this.isConnecting = false; this.isDragging = false; document.body.style.cursor = 'default'; this.renderAllComponents(); this.renderAllConnections(); this.selectComponent(null); this.renderCircuitsList(); this.showNotification("Circuito Cargado", `"${circ.name}"`, "info"); },
+             renderAllComponents() { const ids = new Set(this.components.map(c => c.id)); this.circuitStage.querySelectorAll('.component').forEach(el => { if (!ids.has(el.id)) el.remove(); }); this.components.forEach(c => this.renderComponent(c)); },
+             saveCurrentCircuit() { if (!this.currentCircuitId) return; const circ = this.circuits.find(c => c.id === this.currentCircuitId); if (circ) { circ.components = JSON.parse(JSON.stringify(this.components)); circ.connections = JSON.parse(JSON.stringify(this.connections)); this.saveCircuitsToStorage(); } else { console.error("Save Error: Circuit not found", this.currentCircuitId); } },
+             deleteCircuit(circuitId) { const idx = this.circuits.findIndex(c => c.id === circuitId); if (idx === -1) return; const name = this.circuits[idx].name; this.circuits.splice(idx, 1); this.saveCircuitsToStorage(); this.renderCircuitsList(); if (this.currentCircuitId === circuitId) { this.currentCircuitId = null; this.circuitStage.innerHTML = ''; this.connectionsSvg.innerHTML = ''; this.components = []; this.connections = []; this.selectComponent(null); if (this.circuits.length > 0) { this.loadCircuit(this.circuits[0].id); } else { this.createNewCircuit("Circuito Nuevo", ""); } } this.showNotification("Circuito Eliminado", `"${name}"`, "info"); },
+             renderCircuitsList() { this.circuitsListEl.innerHTML = ''; if (this.circuits.length === 0) { this.circuitsListEl.innerHTML = '<p style="padding: 1rem; color: #777; font-style: italic;">No hay circuitos.</p>'; return; } this.circuits.forEach(c => { const i = document.createElement('div'); i.className = 'circuit-item'; i.dataset.circuitId = c.id; i.classList.toggle('active', c.id === this.currentCircuitId); i.innerHTML = `<button class="delete-circuit-btn btn btn-danger btn-sm" title="Eliminar ${c.name}">&times;</button><div class="circuit-item-name">${c.name || 'Sin nombre'}</div><div class="circuit-item-info">${c.description || 'Sin desc.'}</div>`; this.circuitsListEl.appendChild(i); }); },
+             loadCircuitsFromStorage() { const d = localStorage.getItem('circuits'); if (d) { try { this.circuits = JSON.parse(d); if (!Array.isArray(this.circuits)) this.circuits = []; } catch(e){ console.error("Err parse circuits", e); this.circuits = []; this.showNotification("Error Carga", "Datos corruptos.", "error"); } } else this.circuits = []; },
+             saveCircuitsToStorage() { try { localStorage.setItem('circuits', JSON.stringify(this.circuits)); } catch (e) { console.error("Err save circuits", e); this.showNotification("Error Guardado", "LocalStorage lleno?", "error"); } },
+
+            // --- CORE LOGIC: Graphing ---
+             showGraphModal() {
+                  if (typeof Recharts === 'undefined') { this.showNotification("Error", "Librería Recharts no cargada.", "error"); return; }
+
+                  // *** VALIDACIÓN PLACEHOLDER ***
+                  if (!this.isCircuitValid()) {
+                       this.showNotification("Circuito Inválido", "No se pueden generar gráficas. (Validación no implementada)", "warning", 4000);
+                       return; // No mostrar modal si el circuito "falla" la validación
+                  }
+
+                  // Generar datos (placeholder o de simulación si hubiera)
+                  if (this.simulationData.length === 0) {
+                       this.generatePlaceholderGraphData();
+                       this.showNotification("Gráfica Ejemplo", "Mostrando datos de ejemplo.", "info", 4000);
+                  } else {
+                       this.showNotification("Mostrando Gráficas", "Datos de simulación (placeholder).", "info", 2000);
+                  }
+
+                  // Renderizar y mostrar
+                  this.renderGraphs();
+                  this.showModal('graphModal');
+                  // Activar la primera tab por defecto
+                  const firstTab = this.graphModal.querySelector('.tab');
+                  if(firstTab) this.switchGraphTab(firstTab);
+             },
+
+             // *** NUEVA FUNCIÓN DE VALIDACIÓN (PLACEHOLDER) ***
+             isCircuitValid() {
+                 // Aquí iría la lógica real para detectar:
+                 // 1. Cortocircuitos (ej: Batería conectada directamente a tierra)
+                 // 2. Componentes sin conexión suficiente
+                 // 3. Bucles inválidos, etc.
+                 // 4. COMPROBACIÓN DE LÍMITES (requiere simulación previa):
+                 //    - Comparar V/I/P simulados con los límites de cada componente.
+
+                 console.warn("isCircuitValid() -> Validación real no implementada. Asumiendo circuito OK.");
+                 // Placeholder: Siempre devuelve true por ahora
+                 return true;
+             },
+
+             generatePlaceholderGraphData() { /* ... igual ... */ this.simulationData = []; const dur=5, steps=100, amp=5, freq=1; for (let i=0; i<=steps; i++) { const t=(i/steps)*dur; const v=amp*Math.sin(2*Math.PI*freq*t); const c=(v/100)*(0.8+Math.random()*0.4); const p=v*c; this.simulationData.push({ time: parseFloat(t.toFixed(2)), voltage: parseFloat(v.toFixed(2)), current: parseFloat(c.toFixed(3)), power: parseFloat(p.toFixed(3)) }); } },
+             renderGraphs() { /* ... igual ... */ if (typeof Recharts === 'undefined') return; const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts; const renderC = (id, key, clr, unit) => { const cont = document.getElementById(id); if (!cont) return; cont.innerHTML=''; const chart = React.createElement(ResponsiveContainer, {width:"100%", height:"100%"}, React.createElement(LineChart, {data:this.simulationData, margin:{top:5, right:30, left:0, bottom:5}}, React.createElement(CartesianGrid, {strokeDasharray:"3 3"}), React.createElement(XAxis, {dataKey:"time", type:"number", label:{value:"Tiempo(s)", position:"insideBottomRight", offset:-5}, domain:['dataMin', 'dataMax'], tickFormatter:(t)=>t.toFixed(1)}), React.createElement(YAxis, {label:{value:unit, angle:-90, position:'insideLeft'}, domain:['auto', 'auto'], tickFormatter:(v)=>v.toFixed(1)}), React.createElement(Tooltip, {formatter:(v)=>`${v.toFixed(2)} ${unit}`, labelFormatter:(l)=>`t = ${l.toFixed(2)}s`}), React.createElement(Line, {type:"monotone", dataKey:key, stroke:clr, strokeWidth:2, dot:false, activeDot:{r:6}}))); ReactDOM.render(chart, cont); }; renderC('voltageGraph','voltage','#8884d8','V'); renderC('currentGraph','current','#82ca9d','A'); renderC('powerGraph','power','#ffc658','W'); },
+             switchGraphTab(targetTab) { /* ... igual ... */ const actTab = this.graphModal.querySelector('.tab.active'); const actCont = this.graphModal.querySelector('.tab-content.active'); if (actTab) actTab.classList.remove('active'); if (actCont) actCont.classList.remove('active'); targetTab.classList.add('active'); const tabName = targetTab.dataset.tab; const newCont = document.getElementById(`${tabName}Tab`); if (newCont) newCont.classList.add('active'); },
+
+            // --- UTILITIES / HELPERS (igual) ---
+             getComponentById(id) { return this.components.find(c => c.id === id); }, getConnectionById(id) { return this.connections.find(c => c.id === id); }, showModal(id) { const m=document.getElementById(id); if(m) m.classList.add('active'); }, hideModal(id) { const m=document.getElementById(id); if(m) m.classList.remove('active'); }, showTooltip(txt, evt) { if(!txt) return; this.tooltipEl.textContent=txt; this.tooltipEl.style.display='block'; const sRect=this.circuitStage.parentElement.getBoundingClientRect(); let x=evt.clientX-sRect.left+15+this.circuitStage.parentElement.scrollLeft; let y=evt.clientY-sRect.top+15+this.circuitStage.parentElement.scrollTop; if(evt.clientX+this.tooltipEl.offsetWidth+15>window.innerWidth) x=evt.clientX-sRect.left-this.tooltipEl.offsetWidth-5+this.circuitStage.parentElement.scrollLeft; if(evt.clientY+this.tooltipEl.offsetHeight+15>window.innerHeight) y=evt.clientY-sRect.top-this.tooltipEl.offsetHeight-5+this.circuitStage.parentElement.scrollTop; this.tooltipEl.style.left=`${x}px`; this.tooltipEl.style.top=`${y}px`; }, hideTooltip() { this.tooltipEl.style.display = 'none'; }, _notificationTimeout: null, showNotification(title, msg, type='info', dur=3000) { if (this._notificationTimeout) clearTimeout(this._notificationTimeout); this.notificationTitleEl.textContent=title; this.notificationMessageEl.textContent=msg; this.notificationEl.className='notification'; this.notificationEl.classList.add(type); this.notificationEl.classList.add('show'); this._notificationTimeout = setTimeout(() => { this.notificationEl.classList.remove('show'); this._notificationTimeout = null; }, dur); }
+        };
+        document.addEventListener('DOMContentLoaded', () => { CircuitSimulator.workspace = document.querySelector('.workspace'); CircuitSimulator.init(); });
+    </script>
+</body>
+</html>
